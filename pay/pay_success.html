@@ -572,11 +572,10 @@
 
     function getUserPermissioninfo(transaction_id) {
       if (transaction_id) {
-        let requestObj = { transaction_id: transaction_id }
+        const requestUrl = 'https://wxchpwltgfbpnanpjtwi.supabase.co/functions/v1/checkout-lookup?session_id=' + encodeURIComponent(transaction_id)
         let httpRequest = new XMLHttpRequest() //第一步：创建需要的对象
-        httpRequest.open('POST', 'https://wawebsender.com/api/wapi/get-transaction-info', true) //第二步：dev
-        httpRequest.setRequestHeader('Content-type', 'application/json') //设置请求头 注：post方式必须设置请求头（在建立连接后设置请求头）
-        httpRequest.send(JSON.stringify(requestObj)) //发送请求 将情头体写在send中
+        httpRequest.open('GET', requestUrl, true) //第二步：dev
+        httpRequest.send()
         /**
          * 获取数据后的处理程序
          */
@@ -584,24 +583,28 @@
           //请求后的回调接口，可将请求成功后要执行的程序写在其中
           if (httpRequest.readyState == 4 && httpRequest.status == 200) {
             let responseText = httpRequest.responseText //获取到服务端返回的数据
-            let response_json = JSON.parse(responseText)
-            const { plan_id = '' } = response_json?.data
-            sendMessageToGa(transaction_id, plan_id)
+            let response_json = {}
+            try {
+              response_json = JSON.parse(responseText || '{}')
+            } catch (error) {
+              response_json = {}
+            }
+            const data = response_json?.data || {}
+            const planInfo = data?.plan_id || data?.planId || data?.plan || ''
+            sendMessageToGa(transaction_id, planInfo)
           }
         }
       }
     }
+
     function getActiveCode(utm_campaign) {
-      let requestObj = { transaction_id: utm_campaign }
+      if (!utm_campaign) {
+        return
+      }
+      const requestUrl = 'https://wxchpwltgfbpnanpjtwi.supabase.co/functions/v1/checkout-lookup?session_id=' + encodeURIComponent(utm_campaign)
       let httpRequest = new XMLHttpRequest() //第一步：创建需要的对象
-      // httpRequest.open('POST', 'http://127.0.0.1:8000/api/wapi/permission/active-code-list/', true) //第二步：打开连接
-      httpRequest.open(
-        'POST',
-        'https://wawebsender.com/api/wapi/permission/active-code-list/',
-        true
-      ) //第二步：dev
-      httpRequest.setRequestHeader('Content-type', 'application/json') //设置请求头 注：post方式必须设置请求头（在建立连接后设置请求头）
-      httpRequest.send(JSON.stringify(requestObj)) //发送请求 将情头体写在send中
+      httpRequest.open('GET', requestUrl, true) //第二步：dev
+      httpRequest.send()
       /**
        * 获取数据后的处理程序
        */
@@ -609,15 +612,48 @@
         //请求后的回调接口，可将请求成功后要执行的程序写在其中
         if (httpRequest.readyState == 4 && httpRequest.status == 200) {
           //验证请求是否发送成功
-          getUserPermissioninfo(utm_campaign)
           let responseText = httpRequest.responseText //获取到服务端返回的数据
-          let response_json = JSON.parse(responseText)
-          for (let activeCode of response_json['data'] || []) {
-            renderHTML(activeCode['active_code'])
+          let response_json = {}
+          try {
+            response_json = JSON.parse(responseText || '{}')
+          } catch (error) {
+            response_json = {}
+          }
+          const data = response_json?.data || {}
+          const planInfo = data?.plan_id || data?.planId || data?.plan || ''
+          if (planInfo) {
+            sendMessageToGa(utm_campaign, planInfo)
+          } else {
+            sendMessageToGa(utm_campaign, '')
+          }
+          let codeList = []
+          if (Array.isArray(data)) {
+            codeList = data
+          } else if (Array.isArray(data?.codes)) {
+            codeList = data?.codes
+          } else if (Array.isArray(data?.license_codes)) {
+            codeList = data?.license_codes
+          } else if (Array.isArray(data?.licenses)) {
+            codeList = data?.licenses
+          } else if (Array.isArray(data?.active_codes)) {
+            codeList = data?.active_codes
+          } else if (Array.isArray(data?.items)) {
+            codeList = data?.items
+          } else if (data?.active_code || data?.code || data?.license || data?.license_code) {
+            codeList = [data?.active_code || data?.code || data?.license || data?.license_code]
+          } else if (response_json?.data?.active_code || response_json?.data?.code) {
+            codeList = [response_json?.data?.active_code || response_json?.data?.code]
+          }
+          for (let activeCodeItem of codeList) {
+            const codeValue = typeof activeCodeItem === 'string' ? activeCodeItem : activeCodeItem?.active_code || activeCodeItem?.code || activeCodeItem?.license || activeCodeItem?.license_code || ''
+            if (codeValue) {
+              renderHTML(codeValue)
+            }
           }
         }
       }
     }
+
     function insertStr(activeCode, start, newStr) {
       return activeCode.slice(0, start) + newStr + activeCode.slice(start)
     }
